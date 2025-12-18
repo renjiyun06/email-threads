@@ -207,6 +207,10 @@ class EmailThreadsMonitor:
                         f"[{account.email}] IMAP connection established"
                     )
 
+                    # Initialize: silently load existing messages to storage
+                    # (without triggering callbacks)
+                    self._initialize_existing_messages(mailbox, account)
+
                     # Start IDLE loop
                     self._idle_loop(mailbox, account)
 
@@ -264,6 +268,68 @@ class EmailThreadsMonitor:
                     exc_info=True
                 )
                 break
+
+    def _initialize_existing_messages(
+        self,
+        mailbox: MailBox,
+        account: EmailAccount
+    ) -> None:
+        """
+        Initialize storage with existing unread messages (without callbacks).
+
+        This method is called once when monitoring starts. It silently
+        loads all existing unread messages into storage so they won't
+        trigger callbacks when IDLE is activated. Only messages that
+        arrive AFTER monitoring starts will trigger callbacks.
+
+        Args:
+            mailbox: Connected MailBox instance
+            account: EmailAccount being initialized
+        """
+        logger.info(
+            f"[{account.email}] Initializing: loading existing messages..."
+        )
+
+        try:
+            loaded_count = 0
+            relevant_count = 0
+
+            # Fetch all existing unseen messages
+            for msg in mailbox.fetch(AND(seen=False), mark_seen=False):
+                # Get message ID
+                msg_id = msg.headers.get("message-id", [""])[0].strip()
+
+                # Skip if already in storage (shouldn't happen on first run)
+                if self.storage.exists(msg_id):
+                    continue
+
+                # Check if this message is relevant
+                if self._is_relevant_message(msg, account):
+                    # Convert to EmailMessage
+                    email_msg = self._convert_to_email_message(msg)
+
+                    # Store message WITHOUT triggering callback
+                    self.storage.add(email_msg)
+                    relevant_count += 1
+
+                    logger.debug(
+                        f"[{account.email}] Pre-loaded: "
+                        f"{email_msg.subject[:40]}..."
+                    )
+
+                loaded_count += 1
+
+            logger.info(
+                f"[{account.email}] Initialization complete: "
+                f"pre-loaded {relevant_count} relevant message(s) "
+                f"(out of {loaded_count} total unseen)"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"[{account.email}] Error initializing messages: {e}",
+                exc_info=True
+            )
 
     def _process_new_messages(
         self,
