@@ -1,0 +1,16 @@
+[project]
+name = "email-threads"
+version = "0.1.0"
+description = "Multi-account email monitoring with reply chain support"
+readme = "README.md"
+authors = [
+    { name = "renjiyun", email = "wozaijixu@msn.cn" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "imap-tools>=1.11.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
