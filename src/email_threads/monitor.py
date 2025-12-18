@@ -337,9 +337,13 @@ class EmailThreadsMonitor:
         """
         Check if a message is relevant for monitoring.
 
-        A message is relevant if:
-        1. It's from a monitored account, OR
-        2. It's to a monitored account
+        A message is relevant ONLY if it's communication BETWEEN
+        monitored accounts:
+        1. It's from a monitored account, AND
+        2. It's to (at least one) monitored account
+
+        This ensures we only track emails exchanged between the
+        accounts we're monitoring, not external communications.
 
         Args:
             msg: imap_tools Message object
@@ -356,11 +360,12 @@ class EmailThreadsMonitor:
         if msg.cc:
             recipients.update(msg.cc)
 
-        # Message is relevant if it involves monitored accounts
+        # Message is relevant ONLY if both sender and recipient
+        # are monitored accounts
         from_monitored = sender in self.monitored_emails
         to_monitored = bool(recipients & self.monitored_emails)
 
-        is_relevant = from_monitored or to_monitored
+        is_relevant = from_monitored and to_monitored
 
         logger.debug(
             f"[{account.email}] Relevance check: "
