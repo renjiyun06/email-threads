@@ -287,6 +287,17 @@ class EmailThreadsMonitor:
                     f"{msg.subject[:50]}..."
                 )
 
+                # Get message ID early for duplicate check
+                msg_id = msg.headers.get("message-id", [""])[0].strip()
+
+                # Skip if already processed
+                if self.storage.exists(msg_id):
+                    logger.debug(
+                        f"[{account.email}] Message already processed, "
+                        f"skipping: {msg_id[:30]}..."
+                    )
+                    continue
+
                 # Check if this message is relevant
                 if self._is_relevant_message(msg, account):
                     # Convert to EmailMessage
