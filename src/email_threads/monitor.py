@@ -32,7 +32,8 @@ class EmailThreadsMonitor:
     def __init__(
         self,
         accounts: list[EmailAccount],
-        on_message_callback: Callable[[EmailMessage, list[EmailMessage]], None]
+        on_message_callback: Callable[[EmailMessage, list[EmailMessage]], None],
+        auto_mark_seen: bool = False
     ):
         """
         Initialize the email threads monitor.
@@ -42,6 +43,11 @@ class EmailThreadsMonitor:
             on_message_callback: Callback function invoked when a new
                                  relevant message is received.
                                  Parameters: (current_message, reply_chain)
+            auto_mark_seen: If True, automatically mark processed emails as
+                           seen. This significantly improves performance by
+                           reducing duplicate fetches, but changes mailbox
+                           state. Recommended for dedicated agent accounts.
+                           Default: False (conservative, no mailbox changes)
 
         Raises:
             ValueError: If accounts list is empty
@@ -51,6 +57,7 @@ class EmailThreadsMonitor:
 
         self.accounts = accounts
         self.on_message_callback = on_message_callback
+        self.auto_mark_seen = auto_mark_seen
 
         # Create monitored email addresses set for filtering
         self.monitored_emails = {acc.email for acc in accounts}
@@ -346,8 +353,16 @@ class EmailThreadsMonitor:
         logger.debug(f"[{account.email}] Fetching new messages...")
 
         try:
+            fetched_count = 0
+            processed_count = 0
+
             # Fetch unseen messages
-            for msg in mailbox.fetch(AND(seen=False), mark_seen=False):
+            # Use auto_mark_seen setting to reduce duplicate fetches
+            for msg in mailbox.fetch(
+                AND(seen=False),
+                mark_seen=self.auto_mark_seen
+            ):
+                fetched_count += 1
                 logger.debug(
                     f"[{account.email}] Processing message: "
                     f"{msg.subject[:50]}..."
@@ -383,6 +398,7 @@ class EmailThreadsMonitor:
 
                     try:
                         self.on_message_callback(email_msg, reply_chain)
+                        processed_count += 1
                     except Exception as e:
                         logger.error(
                             f"[{account.email}] Callback error: {e}",
@@ -392,6 +408,14 @@ class EmailThreadsMonitor:
                     logger.debug(
                         f"[{account.email}] Message not relevant, skipping"
                     )
+
+            # Log summary
+            if fetched_count > 0:
+                logger.info(
+                    f"[{account.email}] Fetch complete: "
+                    f"fetched {fetched_count} unseen message(s), "
+                    f"processed {processed_count} new message(s)"
+                )
 
         except Exception as e:
             logger.error(
